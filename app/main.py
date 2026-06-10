@@ -12,22 +12,29 @@ async def init_db() -> None:
     from app.db.session import engine
     from sqlalchemy import text
 
+    # 1. First make sure all latest tables are created if they don't exist
     async with engine.begin() as conn:
-        # Run auto-migration for newly added columns if table exists
-        try:
-            await conn.execute(text("ALTER TABLE tracks ADD COLUMN IF NOT EXISTS telegram_message_id INTEGER"))
-            await conn.execute(text("ALTER TABLE tracks ADD COLUMN IF NOT EXISTS telegram_chat_id BIGINT"))
-            await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS language VARCHAR(5) DEFAULT 'en'"))
-            await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(32)"))
-            
-            # Drop obsolete tables
-            await conn.execute(text("DROP TABLE IF EXISTS playlist_tracks CASCADE"))
-            await conn.execute(text("DROP TABLE IF EXISTS share_tokens CASCADE"))
-            await conn.execute(text("DROP TABLE IF EXISTS likes CASCADE"))
-            await conn.execute(text("DROP TABLE IF EXISTS playlists CASCADE"))
-        except Exception:
-            pass
         await conn.run_sync(Base.metadata.create_all)
+
+    # 2. Run alter columns in individual transactions so a failure in one doesn't abort others
+    alter_statements = [
+        "ALTER TABLE tracks ADD COLUMN IF NOT EXISTS telegram_message_id INTEGER",
+        "ALTER TABLE tracks ADD COLUMN IF NOT EXISTS telegram_chat_id BIGINT",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS language VARCHAR(5) DEFAULT 'en'",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(32)",
+        "DROP TABLE IF EXISTS playlist_tracks CASCADE",
+        "DROP TABLE IF EXISTS share_tokens CASCADE",
+        "DROP TABLE IF EXISTS likes CASCADE",
+        "DROP TABLE IF EXISTS playlists CASCADE",
+    ]
+
+    for stmt in alter_statements:
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text(stmt))
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning("Migration statement failed: %s. Error: %s", stmt, e)
     
     await engine.dispose()
 
