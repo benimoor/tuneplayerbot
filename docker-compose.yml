@@ -1,0 +1,33 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: tunebot
+      POSTGRES_PASSWORD: tunebot
+      POSTGRES_DB: tunebot
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports: ["5432:5432"]
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+
+  bot:
+    build: .
+    command: python -m app.main bot
+    env_file: .env
+    depends_on: [db, redis]
+    volumes:
+      - ./storage:/app/storage
+
+  worker:
+    build: .
+    command: arq app.workers.WorkerSettings
+    env_file: .env
+    depends_on: [db, redis]
+    volumes:
+      - ./storage:/app/storage
+
+volumes:
+  pgdata:
