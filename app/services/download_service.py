@@ -11,7 +11,7 @@ from app.services.resolver import ResolveResult, resolve
 from app.services.types import DownloadedTrack
 
 log = logging.getLogger(__name__)
-_SEM = asyncio.Semaphore(2)  # at most 2 parallel downloads per process
+_SEM = asyncio.Semaphore(4)  # at most 4 parallel downloads per process
 
 
 def extract_youtube_id(url: str) -> str | None:
