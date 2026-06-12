@@ -57,6 +57,40 @@ def _parse_title_artist(og_title: str) -> TrackQuery:
 
 async def _scrape_single(url: str) -> TrackQuery:
     """Scrape a single Spotify track URL for title + artist metadata."""
+    # Method 1: Try the Embed page parsing (highly reliable, bypasses blocks)
+    try:
+        embed_url = url.replace("open.spotify.com/", "open.spotify.com/embed/")
+        async with httpx.AsyncClient(headers=_HEADERS, follow_redirects=True, timeout=10) as client:
+            resp = await client.get(embed_url)
+        if resp.status_code == 200:
+            match = re.search(r'<script[^>]*id=\"__NEXT_DATA__\"[^>]*>(.*?)</script>', resp.text, re.S)
+            if match:
+                data = json.loads(match.group(1))
+                entity = data.get('props', {}).get('pageProps', {}).get('state', {}).get('data', {}).get('entity', {})
+                if entity:
+                    title = entity.get('title') or entity.get('name')
+                    artists_list = entity.get('artists', [])
+                    artists = [a['name'] for a in artists_list if 'name' in a]
+                    artist = ", ".join(artists)
+                    if title and title.lower() not in ("spotify", "spotify premium"):
+                        return TrackQuery(title=title.strip(), artist=artist.strip())
+    except Exception as e:
+        log.warning("Failed to extract metadata from Spotify Embed page: %s", e)
+
+    # Method 2: oEmbed API as a secondary fallback
+    try:
+        oembed_url = f"https://open.spotify.com/oembed?url={url}"
+        async with httpx.AsyncClient(headers=_HEADERS, follow_redirects=True, timeout=10) as client:
+            resp = await client.get(oembed_url)
+        if resp.status_code == 200:
+            data = resp.json()
+            title = data.get("title")
+            if title and title.lower() not in ("spotify", "spotify premium"):
+                return TrackQuery(title=title.strip(), artist="")
+    except Exception as e:
+        log.warning("Failed to extract metadata from Spotify oEmbed: %s", e)
+
+    # Method 3: Fallback to BeautifulSoup scraping of the main page
     async with httpx.AsyncClient(headers=_HEADERS, follow_redirects=True, timeout=15) as client:
         resp = await client.get(url)
         resp.raise_for_status()
@@ -84,12 +118,13 @@ async def _scrape_single(url: str) -> TrackQuery:
 
     # Fallback: try the <title> tag
     if not title and soup.title:
-        return _parse_title_artist(soup.title.string or "")
+        res = _parse_title_artist(soup.title.string or "")
+        if res.title and res.title.lower() not in ("spotify", "spotify premium"):
+            return res
 
-    if title and artist:
-        return TrackQuery(title=title, artist=artist)
-
-    if title:
+    if title and title.lower() not in ("spotify", "spotify premium"):
+        if artist:
+            return TrackQuery(title=title, artist=artist)
         return _parse_title_artist(title)
 
     raise ValueError(f"Could not extract metadata from Spotify URL: {url}")
