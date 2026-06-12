@@ -47,7 +47,7 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             try:
                 async for track in process(url, session):
                     count += 1
-                    await ctx.bot.send_chat_action(msg.chat_id, ChatAction.UPLOAD_AUDIO)
+                    await ctx.bot.send_chat_action(msg.chat_id, ChatAction.UPLOAD_DOCUMENT)
                     
                     msg_sent = None
                     if track.telegram_file_id:
