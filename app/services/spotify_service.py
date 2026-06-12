@@ -168,15 +168,30 @@ async def _scrape_playlist_or_album(url: str) -> list[TrackQuery]:
     return tracks
 
 
+def _clean_spotify_query(q: TrackQuery) -> TrackQuery:
+    """Clean 'Spotify Premium' and related noise from track metadata."""
+    title = q.title
+    title = re.sub(r"Spotify\s+Premium\s*[-–—·\s]*", "", title, flags=re.I).strip()
+    title = re.sub(r"[-–—·\s]*Spotify\s+Premium", "", title, flags=re.I).strip()
+
+    artist = q.artist
+    artist = re.sub(r"Spotify\s+Premium\s*[-–—·\s]*", "", artist, flags=re.I).strip()
+    artist = re.sub(r"[-–—·\s]*Spotify\s+Premium", "", artist, flags=re.I).strip()
+
+    return TrackQuery(title=title, artist=artist)
+
+
 async def resolve(url: str) -> list[TrackQuery]:
     """Resolve a Spotify URL to track queries (no account needed)."""
     if _TRACK_RE.search(url):
         q = await _scrape_single(url)
+        q = _clean_spotify_query(q)
         log.info("Spotify track resolved: %s", q.search_query)
         return [q]
 
     if _PLAYLIST_RE.search(url) or _ALBUM_RE.search(url):
         qs = await _scrape_playlist_or_album(url)
+        qs = [_clean_spotify_query(q) for q in qs]
         log.info("Spotify playlist/album resolved: %d tracks", len(qs))
         return qs
 

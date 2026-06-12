@@ -47,7 +47,7 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             try:
                 async for track in process(url, session):
                     count += 1
-                    await ctx.bot.send_chat_action(msg.chat_id, ChatAction.UPLOAD_VOICE)
+                    await ctx.bot.send_chat_action(msg.chat_id, ChatAction.UPLOAD_AUDIO)
                     
                     msg_sent = None
                     if track.telegram_file_id:
@@ -60,10 +60,23 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                             )
                         except Exception:
                             log.warning("Failed to send track via file_id: %s", track.telegram_file_id)
+                            track.telegram_file_id = None
+                            await session.commit()
                             pass
                     
                     if not msg_sent:
                         import os
+                        # If file is not present locally on disk, perform a fresh download
+                        if not track.file_path or not os.path.exists(track.file_path):
+                            log.info("File not found on disk, performing fresh download for youtube_id: %s", track.youtube_id)
+                            try:
+                                from app.services import youtube_service
+                                dt = await youtube_service.download_url(f"https://www.youtube.com/watch?v={track.youtube_id}")
+                                track.file_path = dt.file_path
+                                await session.commit()
+                            except Exception:
+                                log.exception("Failed to re-download track %s", track.youtube_id)
+
                         if track.file_path and os.path.exists(track.file_path):
                             with open(track.file_path, "rb") as fh:
                                 msg_sent = await ctx.bot.send_audio(
