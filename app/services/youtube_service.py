@@ -16,7 +16,7 @@ _YDL_OPTS = {
     "noprogress": True,
     "restrictfilenames": True,
     "noplaylist": True,
-    "remote_components": "ejs:github",
+    "remote_components": ["ejs:github"],
     "postprocessors": [
         {"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "192"},
         {"key": "FFmpegMetadata"},
